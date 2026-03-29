@@ -11,8 +11,7 @@ from telegram_notify import send_telegram_alert, send_telegram_image
 def load_model():
     # lightweight model for faster detection
     return YOLO("yolov8n.pt")
-
-model = load_model()
+    model = load_model()
 
 
 # ---------------- GLOBAL TIMERS ----------------
