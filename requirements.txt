@@ -1,13 +1,5 @@
 streamlit
-streamlit-webrtc
-opencv-python-headless
+opencv-python
 ultralytics
-torch
-torchvision
-numpy
-pillow
-pymongo
-python-dotenv
 requests
-bcrypt
-av
+numpy
