@@ -9,143 +9,144 @@ st.set_page_config(page_title="AI Vision Engine", layout="centered")
 
 st.title("AI Vision Engine")
 
-
 # ---------------- SESSION STATE ----------------
 
 if "user" not in st.session_state:
-    st.session_state["user"] = None
+st.session_state["user"] = None
 
 if "detect" not in st.session_state:
-    st.session_state["detect"] = False
-
+st.session_state["detect"] = False
 
 # ---------------- VIDEO PROCESSOR ----------------
 
 class VideoProcessor(VideoProcessorBase):
 
-    def __init__(self):
-        self.chat_id = None
-        self.frame_count = 0
+```
+def __init__(self):
+    self.chat_id = None
+    self.frame_count = 0
 
-    def recv(self, frame):
+def recv(self, frame):
 
-        img = frame.to_ndarray(format="bgr24")
+    img = frame.to_ndarray(format="bgr24")
 
-        try:
-            img = cv2.resize(img, (640, 480))
+    try:
+        img = cv2.resize(img, (640, 480))
 
-            # Reduce lag → run detection every 5 frames
-            self.frame_count += 1
+        # reduce lag → run detection every 5 frames
+        self.frame_count += 1
 
-            if st.session_state["detect"] and self.frame_count % 5 == 0:
-                img = detect_objects(img, self.chat_id)
+        if st.session_state["detect"] and self.frame_count % 5 == 0:
+            img = detect_objects(img, self.chat_id)
 
-        except Exception as e:
-            print("Detection error:", e)
+    except Exception as e:
+        print("Detection error:", e)
 
-        return av.VideoFrame.from_ndarray(img, format="bgr24")
-
+    return av.VideoFrame.from_ndarray(img, format="bgr24")
+```
 
 # ---------------- LOGIN PAGE ----------------
 
 if st.session_state["user"] is None:
 
-    login_tab, signup_tab = st.tabs(["Login", "Signup"])
+```
+login_tab, signup_tab = st.tabs(["Login", "Signup"])
 
-    with login_tab:
+with login_tab:
 
-        email = st.text_input("Email")
-        password = st.text_input("Password", type="password")
+    email = st.text_input("Email")
+    password = st.text_input("Password", type="password")
 
-        if st.button("Login"):
+    if st.button("Login"):
 
-            user = login_user(email, password)
+        user = login_user(email, password)
 
-            if user:
-                st.session_state["user"] = email
-                st.success("Login successful")
-                st.rerun()
+        if user:
+            st.session_state["user"] = email
+            st.success("Login successful")
+            st.rerun()
 
-            else:
-                st.error("Invalid email or password")
+        else:
+            st.error("Invalid email or password")
 
-    with signup_tab:
+with signup_tab:
 
-        new_email = st.text_input("Email", key="signup_email")
-        new_pass = st.text_input("Password", type="password", key="signup_pass")
+    new_email = st.text_input("Email", key="signup_email")
+    new_pass = st.text_input("Password", type="password", key="signup_pass")
 
-        if st.button("Create Account"):
+    if st.button("Create Account"):
 
-            created = add_user(new_email, new_pass)
+        created = add_user(new_email, new_pass)
 
-            if created:
-                st.success("Account created. Please login.")
-            else:
-                st.error("User already exists")
+        if created:
+            st.success("Account created. Please login.")
+        else:
+            st.error("User already exists")
+```
 
-
-# ---------------- DASHBOARD AFTER LOGIN ----------------
+# ---------------- DASHBOARD ----------------
 
 else:
 
-    user = st.session_state["user"]
+```
+user = st.session_state["user"]
 
-    st.success(f"Logged in as {user}")
+st.success(f"Logged in as {user}")
 
-    if st.button("Logout"):
-        st.session_state["user"] = None
-        st.rerun()
+if st.button("Logout"):
+    st.session_state["user"] = None
+    st.rerun()
 
-    st.divider()
+st.divider()
 
-    # ---------------- TELEGRAM CONNECTION ----------------
+# ---------------- TELEGRAM ----------------
 
-    st.subheader("Connect Telegram Notifications")
+st.subheader("Connect Telegram Notifications")
 
-    st.markdown("Get your chat id here → https://t.me/userinfobot")
+st.markdown("Get your chat id here → https://t.me/userinfobot")
 
-    chat_id = st.text_input("Enter Telegram Chat ID")
+chat_id = st.text_input("Enter Telegram Chat ID")
 
-    if st.button("Save Chat ID"):
+if st.button("Save Chat ID"):
+    update_chat_id(user, chat_id)
+    st.success("Chat ID saved")
 
-        update_chat_id(user, chat_id)
+saved_chat = get_chat_id(user)
 
-        st.success("Chat ID saved")
+# ---------------- CAMERA + DETECTION ----------------
 
-    saved_chat = get_chat_id(user)
+if saved_chat:
 
+    st.success("Telegram Connected")
 
-    # ---------------- CAMERA + DETECTION ----------------
+    st.subheader("Live Camera")
 
-    if saved_chat:
+    col1, col2 = st.columns(2)
 
-        st.success("Telegram Connected")
+    with col1:
+        if st.button("Start Detection"):
+            st.session_state["detect"] = True
 
-        st.subheader("Live Camera")
+    with col2:
+        if st.button("Stop Detection"):
+            st.session_state["detect"] = False
 
-        col1, col2 = st.columns(2)
-
-        with col1:
-            if st.button("Start Detection"):
-                st.session_state["detect"] = True
-
-        with col2:
-            if st.button("Stop Detection"):
-                st.session_state["detect"] = False
-
-
-        ctx = webrtc_streamer(
-            key="ai-vision-camera",
-            video_processor_factory=VideoProcessor,
-            media_stream_constraints={
-                "video": True,
-                "audio": False
+    ctx = webrtc_streamer(
+        key="ai-vision-camera",
+        video_processor_factory=VideoProcessor,
+        media_stream_constraints={
+            "video": {
+                "facingMode": "user",
+                "width": 640,
+                "height": 480
             },
-            async_processing=True
-        )
+            "audio": False
+        },
+        async_processing=True
+    )
 
-        if ctx.video_processor:
-            ctx.video_processor.chat_id = saved_chat
+    if ctx.video_processor:
+        ctx.video_processor.chat_id = saved_chat
 
-    else:
-        st.warning("Please connect Telegram Chat ID to enable alerts.")
+else:
+    st.warning("Please connect Telegram Chat ID to enable alerts.")
