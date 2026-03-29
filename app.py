@@ -1,5 +1,6 @@
 import streamlit as st
 import cv2
+import av
 from streamlit_webrtc import webrtc_streamer, VideoProcessorBase
 from auth import add_user, login_user, update_chat_id, get_chat_id
 from detect import detect_objects
@@ -14,6 +15,9 @@ st.title("AI Vision Engine")
 if "user" not in st.session_state:
     st.session_state["user"] = None
 
+if "detect" not in st.session_state:
+    st.session_state["detect"] = False
+
 
 # ---------------- VIDEO PROCESSOR ----------------
 
@@ -21,20 +25,22 @@ class VideoProcessor(VideoProcessorBase):
 
     def __init__(self):
         self.chat_id = None
+        self.frame_count = 0
 
     def recv(self, frame):
 
         img = frame.to_ndarray(format="bgr24")
 
         try:
-            # resize frame for faster processing
             img = cv2.resize(img, (640, 480))
 
-            # run YOLO detection
-            img = detect_objects(img, self.chat_id)
+            # Reduce lag → run detection every 5 frames
+            self.frame_count += 1
+
+            if st.session_state["detect"] and self.frame_count % 5 == 0:
+                img = detect_objects(img, self.chat_id)
 
         except Exception as e:
-            # prevent stream crash
             print("Detection error:", e)
 
         return av.VideoFrame.from_ndarray(img, format="bgr24")
@@ -46,7 +52,6 @@ if st.session_state["user"] is None:
 
     login_tab, signup_tab = st.tabs(["Login", "Signup"])
 
-    # LOGIN
     with login_tab:
 
         email = st.text_input("Email")
@@ -64,8 +69,6 @@ if st.session_state["user"] is None:
             else:
                 st.error("Invalid email or password")
 
-
-    # SIGNUP
     with signup_tab:
 
         new_email = st.text_input("Email", key="signup_email")
@@ -112,13 +115,24 @@ else:
     saved_chat = get_chat_id(user)
 
 
-    # ---------------- DETECTION ----------------
+    # ---------------- CAMERA + DETECTION ----------------
 
     if saved_chat:
 
         st.success("Telegram Connected")
 
-        st.subheader("Live Camera Detection")
+        st.subheader("Live Camera")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            if st.button("Start Detection"):
+                st.session_state["detect"] = True
+
+        with col2:
+            if st.button("Stop Detection"):
+                st.session_state["detect"] = False
+
 
         ctx = webrtc_streamer(
             key="ai-vision-camera",
@@ -130,7 +144,6 @@ else:
             async_processing=True
         )
 
-        # pass chat id to video processor
         if ctx.video_processor:
             ctx.video_processor.chat_id = saved_chat
 
