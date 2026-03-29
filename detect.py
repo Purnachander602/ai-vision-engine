@@ -20,10 +20,7 @@ model = load_model()
 last_alert_time = 0
 last_detection_time = 0
 
-# seconds between telegram alerts
 ALERT_INTERVAL = 10
-
-# seconds between YOLO detections
 DETECTION_INTERVAL = 0.5
 
 
@@ -36,10 +33,9 @@ def detect_objects(frame, chat_id=None):
 
     current_time = time.time()
 
-    # reduce frame size for faster inference
     frame = cv2.resize(frame, (640, 480))
 
-    # skip detection if called too quickly
+    # skip detection if too frequent
     if current_time - last_detection_time < DETECTION_INTERVAL:
         return frame
 
@@ -50,7 +46,6 @@ def detect_objects(frame, chat_id=None):
 
     detected_label = None
 
-    # objects that trigger alerts
     alert_objects = ["person", "knife", "cell phone"]
 
     for r in results:
@@ -58,9 +53,12 @@ def detect_objects(frame, chat_id=None):
         if r.boxes is None:
             continue
 
+        names = r.names
+
         for box in r.boxes:
 
-            label = model.names[int(box.cls)]
+            cls_id = int(box.cls[0])
+            label = names[cls_id]
 
             if label in alert_objects:
                 detected_label = label
@@ -72,30 +70,26 @@ def detect_objects(frame, chat_id=None):
 
     # ---------------- TELEGRAM ALERT ----------------
 
-    if detected_label:
+    if detected_label and (current_time - last_alert_time > ALERT_INTERVAL):
 
-        if current_time - last_alert_time > ALERT_INTERVAL:
+        image_path = "detected.jpg"
+        cv2.imwrite(image_path, frame)
 
-            image_path = "detected.jpg"
-            cv2.imwrite(image_path, frame)
+        if chat_id:
+            send_telegram_alert(chat_id, f"🚨 {detected_label} detected")
+            send_telegram_image(chat_id, image_path)
 
-            if chat_id:
-
-                send_telegram_alert(
-                    chat_id,
-                    f"🚨 {detected_label} detected"
-                )
-
-                send_telegram_image(chat_id, image_path)
-
-            last_alert_time = current_time
+        last_alert_time = current_time
 
 
     # ---------------- DRAW BOUNDING BOX ----------------
 
+    annotated_frame = frame
+
     try:
-        annotated_frame = results[0].plot()
-    except:
-        annotated_frame = frame
+        if results and len(results) > 0:
+            annotated_frame = results[0].plot()
+    except Exception as e:
+        print("Annotation error:", e)
 
     return annotated_frame
