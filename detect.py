@@ -1,46 +1,70 @@
+```python
 from ultralytics import YOLO
 from telegram_notify import send_telegram_alert, send_telegram_image
 import time
 import cv2
 
-# load YOLO model (fast nano model)
+# ---------------- LOAD MODEL ----------------
+
+# lightweight model for faster detection
 model = YOLO("yolov8n.pt")
+
+# ---------------- GLOBAL TIMERS ----------------
 
 last_alert_time = 0
 last_detection_time = 0
 
-ALERT_INTERVAL = 10      # seconds between telegram alerts
-DETECTION_INTERVAL = 0.5 # seconds between YOLO runs
+# seconds between telegram alerts
+ALERT_INTERVAL = 10
 
+# seconds between YOLO detections
+DETECTION_INTERVAL = 0.5
+
+
+# ---------------- DETECTION FUNCTION ----------------
 
 def detect_objects(frame, chat_id=None):
 
-    global last_alert_time, last_detection_time
+    global last_alert_time
+    global last_detection_time
 
     current_time = time.time()
 
-    # Skip detection if called too fast
+    # reduce frame size for faster inference
+    frame = cv2.resize(frame, (640, 480))
+
+    # skip detection if called too quickly
     if current_time - last_detection_time < DETECTION_INTERVAL:
         return frame
 
     last_detection_time = current_time
 
-    results = model(frame)
+    # run YOLO detection
+    results = model(frame, conf=0.4)
 
     detected_label = None
 
+    # objects that trigger alerts
+    alert_objects = ["person", "knife", "cell phone"]
+
     for r in results:
+
+        if r.boxes is None:
+            continue
+
         for box in r.boxes:
 
             label = model.names[int(box.cls)]
-
-            alert_objects = ["person", "knife", "cell phone"]
 
             if label in alert_objects:
                 detected_label = label
                 break
 
-    # Send Telegram alert (with cooldown)
+        if detected_label:
+            break
+
+    # ---------------- TELEGRAM ALERT ----------------
+
     if detected_label:
 
         if current_time - last_alert_time > ALERT_INTERVAL:
@@ -49,6 +73,7 @@ def detect_objects(frame, chat_id=None):
             cv2.imwrite(image_path, frame)
 
             if chat_id:
+
                 send_telegram_alert(
                     chat_id,
                     f"🚨 {detected_label} detected"
@@ -58,6 +83,8 @@ def detect_objects(frame, chat_id=None):
 
             last_alert_time = current_time
 
+    # draw bounding boxes
     annotated_frame = results[0].plot()
 
     return annotated_frame
+```
