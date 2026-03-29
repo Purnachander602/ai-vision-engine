@@ -119,17 +119,25 @@ else:
                 st.rerun()
 
         # WebRTC Streamer
-        ctx = webrtc_streamer(
+ctx = webrtc_streamer(
     key="ai-vision-camera",
     video_processor_factory=VideoProcessor,
+
     media_stream_constraints={
         "video": {
+            "facingMode": "user",
             "width": 640,
-            "height": 480,
-            "facingMode": "user"
+            "height": 480
         },
         "audio": False
     },
+
+    video_html_attrs={
+        "autoPlay": True,
+        "controls": False,
+        "muted": True
+    },
+
     async_processing=True
 )
 
