@@ -1,5 +1,7 @@
 streamlit
-opencv-python
+streamlit-webrtc
+opencv-python-headless
 ultralytics
-requests
 numpy
+requests
+av
