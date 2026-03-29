@@ -1,59 +1,89 @@
-import bcrypt
-from pymongo import MongoClient
-from dotenv import load_dotenv
-import os
+import sqlite3
 
-load_dotenv()
+DB_NAME = "users.db"
 
-MONGO_URI = os.getenv("MONGO_URI")
+def init_db():
+    """Initialize the database and create table if not exists"""
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
 
-client = MongoClient(MONGO_URI)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            email TEXT PRIMARY KEY,
+            password TEXT NOT NULL,
+            chat_id TEXT
+        )
+    """)
 
-db = client["ai_vision_engine"]
-users = db["users"]
+    conn.commit()
+    conn.close()
 
 
-def add_user(email, password):
+def add_user(email: str, password: str) -> bool:
+    """Add a new user. Returns True if successful, False if email already exists."""
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
 
-    existing = users.find_one({"email": email})
-
-    if existing:
+    try:
+        c.execute(
+            "INSERT INTO users (email, password, chat_id) VALUES (?, ?, ?)",
+            (email, password, None)
+        )
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError:  # Email already exists
         return False
-
-    hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
-
-    users.insert_one({
-        "email": email,
-        "password": hashed,
-        "chat_id": None
-    })
-
-    return True
+    except Exception as e:
+        print(f"Error adding user: {e}")
+        return False
+    finally:
+        conn.close()
 
 
-def login_user(email, password):
+def login_user(email: str, password: str):
+    """Login user. Returns user tuple if successful, else None."""
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
 
-    user = users.find_one({"email": email})
-
-    if user and bcrypt.checkpw(password.encode(), user["password"]):
+    try:
+        c.execute(
+            "SELECT * FROM users WHERE email = ? AND password = ?",
+            (email, password)
+        )
+        user = c.fetchone()
         return user
-
-    return None
-
-
-def update_chat_id(email, chat_id):
-
-    users.update_one(
-        {"email": email},
-        {"$set": {"chat_id": chat_id}}
-    )
+    finally:
+        conn.close()
 
 
-def get_chat_id(email):
+def update_chat_id(email: str, chat_id: str) -> bool:
+    """Update chat_id for a user. Returns True if updated."""
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
 
-    user = users.find_one({"email": email})
+    try:
+        c.execute(
+            "UPDATE users SET chat_id = ? WHERE email = ?",
+            (chat_id, email)
+        )
+        conn.commit()
+        return c.rowcount > 0  # Return True if any row was updated
+    finally:
+        conn.close()
 
-    if user:
-        return user.get("chat_id")
 
-    return None
+def get_chat_id(email: str):
+    """Get chat_id for a user. Returns chat_id or None."""
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+
+    try:
+        c.execute("SELECT chat_id FROM users WHERE email = ?", (email,))
+        data = c.fetchone()
+        return data[0] if data else None
+    finally:
+        conn.close()
+
+
+# Initialize database when module is imported
+init_db()
