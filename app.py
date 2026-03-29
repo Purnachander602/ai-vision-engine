@@ -9,6 +9,7 @@ st.set_page_config(page_title="AI Vision Engine", layout="centered")
 
 st.title("AI Vision Engine")
 
+
 # ---------------- SESSION STATE ----------------
 
 if "user" not in st.session_state:
@@ -26,11 +27,16 @@ class VideoProcessor(VideoProcessorBase):
 
         img = frame.to_ndarray(format="bgr24")
 
-        # resize frame for faster processing
-        img = cv2.resize(img, (640, 480))
+        try:
+            # resize frame for faster processing
+            img = cv2.resize(img, (640, 480))
 
-        # run YOLO detection
-        img = detect_objects(img, self.chat_id)
+            # run YOLO detection
+            img = detect_objects(img, self.chat_id)
+
+        except Exception as e:
+            # prevent stream crash
+            print("Detection error:", e)
 
         return av.VideoFrame.from_ndarray(img, format="bgr24")
 
@@ -58,6 +64,7 @@ if st.session_state["user"] is None:
 
             else:
                 st.error("Invalid email or password")
+
 
     # SIGNUP
     with signup_tab:
@@ -89,6 +96,8 @@ else:
 
     st.divider()
 
+    # ---------------- TELEGRAM CONNECTION ----------------
+
     st.subheader("Connect Telegram Notifications")
 
     st.markdown("Get your chat id here → https://t.me/userinfobot")
@@ -102,6 +111,7 @@ else:
         st.success("Chat ID saved")
 
     saved_chat = get_chat_id(user)
+
 
     # ---------------- DETECTION ----------------
 
@@ -117,8 +127,13 @@ else:
             media_stream_constraints={
                 "video": True,
                 "audio": False
-            }
+            },
+            async_processing=True
         )
 
+        # pass chat id to video processor
         if ctx.video_processor:
             ctx.video_processor.chat_id = saved_chat
+
+    else:
+        st.warning("Please connect Telegram Chat ID to enable alerts.")
