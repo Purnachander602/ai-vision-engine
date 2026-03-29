@@ -144,6 +144,5 @@ ctx = webrtc_streamer(
         # Pass chat_id to the processor
 if ctx.video_processor:
             ctx.video_processor.chat_id = saved_chat
-
-    else:
+else:
         st.warning("⚠️ Please connect your Telegram Chat ID to enable object detection alerts.")
