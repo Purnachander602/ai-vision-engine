@@ -1,113 +1,142 @@
 import streamlit as st
 import cv2
-from auth import add_user, login_user, update_chat_id, get_chat_id
+import time
 from detect import detect_objects
+from auth import add_user, login_user, update_chat_id, get_chat_id
 
-st.set_page_config(page_title="AI Vision Engine", layout="centered")
+st.set_page_config(page_title="AI Vision Engine", layout="wide")
 
 st.title("AI Vision Engine")
 
-# ---------------- SESSION STATE ----------------
+# Initialize session state
 if "user" not in st.session_state:
     st.session_state.user = None
-
 if "detect" not in st.session_state:
     st.session_state.detect = False
+if "frame_window" not in st.session_state:
+    st.session_state.frame_window = None
 
-
-# ---------------- LOGIN / SIGNUP ----------------
+# ====================== LOGIN ======================
 if st.session_state.user is None:
-    login_tab, signup_tab = st.tabs(["Login", "Signup"])
+    tab1, tab2 = st.tabs(["Login", "Signup"])
 
-    with login_tab:
+    with tab1:
         email = st.text_input("Email", key="login_email")
-        password = st.text_input("Password", type="password", key="login_password")
+        password = st.text_input("Password", type="password", key="login_pass")
 
         if st.button("Login"):
             user = login_user(email, password)
             if user:
                 st.session_state.user = email
-                st.success("Login successful!")
                 st.rerun()
             else:
                 st.error("Invalid credentials")
 
-    with signup_tab:
+    with tab2:
         email = st.text_input("Email", key="signup_email")
-        password = st.text_input("Password", type="password", key="signup_password")
+        password = st.text_input("Password", type="password", key="signup_pass")
 
         if st.button("Create Account"):
             if add_user(email, password):
-                st.success("Account created successfully. Please login.")
+                st.success("Account created successfully! Please login.")
             else:
                 st.error("User already exists")
+    st.stop()  # Important: stop execution here
 
+# ====================== DASHBOARD ======================
+user = st.session_state.user
 
-# ---------------- DASHBOARD ----------------
-else:
-    user = st.session_state.user
+st.success(f"Logged in as: **{user}**")
 
-    st.success(f"Logged in as: **{user}**")
+if st.button("Logout"):
+    st.session_state.user = None
+    st.rerun()
 
-    if st.button("Logout"):
-        st.session_state.user = None
+st.divider()
+
+st.subheader("Telegram Alerts")
+st.markdown("Get your Chat ID → [https://t.me/userinfobot](https://t.me/userinfobot)")
+
+chat_id = st.text_input("Enter Telegram Chat ID", value=get_chat_id(user) or "")
+
+if st.button("Save Chat ID"):
+    if chat_id.strip():
+        update_chat_id(user, chat_id.strip())
+        st.success("Telegram Chat ID saved!")
+        st.rerun()
+    else:
+        st.error("Please enter a valid Chat ID")
+
+saved_chat = get_chat_id(user)
+
+if not saved_chat:
+    st.warning("Please add your Telegram Chat ID first to enable alerts.")
+    st.stop()
+
+# ====================== DETECTION SECTION ======================
+st.subheader("Object Detection")
+
+col1, col2 = st.columns([1, 1])
+
+with col1:
+    if st.button("Start Detection", type="primary", use_container_width=True):
+        st.session_state.detect = True
         st.rerun()
 
-    st.divider()
+with col2:
+    if st.button("Stop Detection", type="secondary", use_container_width=True):
+        st.session_state.detect = False
+        st.rerun()
 
-    # ---------------- TELEGRAM CONNECTION ----------------
-    st.subheader("Telegram Alerts")
-    st.markdown("Get your chat ID here → [https://t.me/userinfobot](https://t.me/userinfobot)")
+# Create placeholder once (outside any loop)
+if st.session_state.frame_window is None:
+    st.session_state.frame_window = st.empty()
 
-    chat_id_input = st.text_input("Enter Chat ID", key="chat_id_input")
+frame_window = st.session_state.frame_window
 
-    if st.button("Save Chat ID"):
-        if chat_id_input.strip():
-            update_chat_id(user, chat_id_input.strip())
-            st.success("Chat ID saved successfully!")
-            st.rerun()
-        else:
-            st.warning("Please enter a valid Chat ID")
+# Main detection logic using checkbox pattern (recommended)
+run_detection = st.checkbox("Run Live Detection", value=st.session_state.detect, key="run_check")
 
-    saved_chat = get_chat_id(user)
+if run_detection and saved_chat:
+    st.session_state.detect = True
+    
+    cap = cv2.VideoCapture(0)
+    
+    if not cap.isOpened():
+        st.error("Cannot access camera. Make sure it is not being used by another application.")
+        st.stop()
 
-    # ---------------- CAMERA + DETECTION ----------------
-    if saved_chat:
-        st.success("✅ Telegram Connected")
+    try:
+        while True:   # This runs only during one script execution
+            ret, frame = cap.read()
+            if not ret:
+                st.error("Failed to read frame from camera")
+                break
 
-        st.subheader("Live Object Detection")
+            # Process frame (your detection + telegram alert)
+            processed_frame = detect_objects(frame, saved_chat)
 
-        col1, col2 = st.columns(2)
+            # Display (convert BGR → RGB if needed)
+            frame_window.image(processed_frame, channels="BGR", use_column_width=True)
 
-        with col1:
-            if st.button("▶️ Start Detection"):
-                st.session_state.detect = True
-                st.rerun()
+            # Small delay to control FPS and reduce CPU usage
+            time.sleep(0.03)  # \~30 FPS max
 
-        with col2:
-            if st.button("⏹️ Stop Detection"):
-                st.session_state.detect = False
-                st.rerun()
+            # Check if user stopped via checkbox
+            if not st.session_state.get("run_check", False):
+                break
 
-        # Display area for video frames
-        frame_window = st.empty()
+    except Exception as e:
+        st.error(f"Error during detection: {e}")
+    finally:
+        cap.release()
+        st.session_state.detect = False
 
-        if st.session_state.detect:
-            cap = cv2.VideoCapture(0)
+elif not run_detection:
+    st.session_state.detect = False
+    frame_window.image([])  # Clear the frame
 
-            while st.session_state.detect:
-                ret, frame = cap.read()
-                if not ret:
-                    st.error("Failed to access camera")
-                    break
+else:
+    st.info("Click **Start Detection** or enable the checkbox above.")
 
-                # Run detection
-                processed_frame = detect_objects(frame, saved_chat)
-
-                # Display the frame
-                frame_window.image(processed_frame, channels="BGR", use_column_width=True)
-
-            cap.release()
-
-    else:
-        st.warning("⚠️ Please add your Telegram Chat ID first to enable detection alerts.")
+st.caption("Note: Webcam access works only when running **locally**. For deployment use `streamlit-webrtc`.")
