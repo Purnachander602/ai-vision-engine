@@ -12,10 +12,10 @@ st.title("AI Vision Engine")
 # ---------------- SESSION STATE ----------------
 
 if "user" not in st.session_state:
-st.session_state["user"] = None
+    st.session_state["user"] = None
 
 if "detect" not in st.session_state:
-st.session_state["detect"] = False
+    st.session_state["detect"] = False
 
 # ---------------- VIDEO PROCESSOR ----------------
 
