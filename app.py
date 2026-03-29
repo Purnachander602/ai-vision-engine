@@ -1,4 +1,3 @@
-```python
 import streamlit as st
 import av
 import cv2
