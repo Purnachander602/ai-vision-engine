@@ -1,4 +1,3 @@
-```python
 from ultralytics import YOLO
 from telegram_notify import send_telegram_alert, send_telegram_image
 import time
