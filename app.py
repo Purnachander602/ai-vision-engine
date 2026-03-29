@@ -16,28 +16,10 @@ st.set_page_config(
 # ========================== CUSTOM CSS ==========================
 st.markdown("""
 <style>
-    .stApp {
-        background-color: #0f172a;
-        color: white;
-    }
-    h1 {
-        text-align: center;
-        color: #60a5fa;
-    }
-    .stButton>button {
-        width: 100%;
-    }
-    video {
-        width: 100% !important;
-        border-radius: 12px;
-        border: 2px solid #334155;
-    }
-    .block-container {
-        padding-top: 2rem;
-    }
-    .success {
-        color: #4ade80;
-    }
+    .stApp { background-color: #0f172a; color: white; }
+    h1 { text-align: center; color: #60a5fa; }
+    video { width: 100% !important; border-radius: 12px; border: 2px solid #334155; }
+    .stButton>button { width: 100%; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -57,19 +39,15 @@ class VideoProcessor(VideoProcessorBase):
 
     def recv(self, frame):
         img = frame.to_ndarray(format="bgr24")
-        
-        # Resize for faster processing
         img = cv2.resize(img, (640, 480))
 
         self.frame_count += 1
 
-        # Run detection every 5 frames when enabled
         if st.session_state.detect and self.frame_count % 5 == 0:
             try:
                 img = detect_objects(img, self.chat_id)
             except Exception as e:
                 print(f"Detection error: {e}")
-                # Return original frame if detection fails
 
         return av.VideoFrame.from_ndarray(img, format="bgr24")
 
@@ -103,9 +81,9 @@ if st.session_state.user is None:
         if st.button("Create Account", type="primary", use_container_width=True):
             if email and password:
                 if add_user(email, password):
-                    st.success("✅ Account created successfully! Please login.")
+                    st.success("✅ Account created! Please login.")
                 else:
-                    st.error("❌ User with this email already exists")
+                    st.error("❌ User already exists")
             else:
                 st.warning("Please fill all fields")
 
@@ -115,7 +93,7 @@ else:
 
     st.success(f"✅ Logged in as **{user}**")
 
-    if st.button("Logout", type="secondary"):
+    if st.button("Logout"):
         st.session_state.user = None
         st.session_state.detect = False
         st.rerun()
@@ -128,6 +106,17 @@ else:
     with col1:
         st.subheader("📹 Live Surveillance Camera")
 
+        # Camera preference option
+        camera_preference = st.radio(
+            "Camera Source",
+            options=["Laptop Webcam (Recommended)", "Any Camera"],
+            horizontal=True,
+            label_visibility="collapsed"
+        )
+
+        # Set facingMode based on preference
+        facing_mode = {"exact": "user"} if camera_preference == "Laptop Webcam (Recommended)" else "user"
+
         ctx = webrtc_streamer(
             key="camera",
             video_processor_factory=VideoProcessor,
@@ -135,15 +124,16 @@ else:
                 "video": {
                     "width": {"ideal": 1280},
                     "height": {"ideal": 720},
-                    "facingMode": "user"
+                    "facingMode": facing_mode
                 },
                 "audio": False
             },
             async_processing=True,
-            rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+            rtc_configuration={
+                "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
+            }
         )
 
-        # Pass chat_id to video processor
         if ctx.video_processor:
             ctx.video_processor.chat_id = get_chat_id(user)
 
@@ -151,42 +141,38 @@ else:
     with col2:
         st.subheader("⚙️ Control Panel")
 
-        col_start, col_stop = st.columns(2)
-        with col_start:
+        c1, c2 = st.columns(2)
+        with c1:
             if st.button("🟢 Start Detection", type="primary", use_container_width=True):
                 st.session_state.detect = True
                 st.rerun()
-
-        with col_stop:
+        with c2:
             if st.button("🔴 Stop Detection", type="secondary", use_container_width=True):
                 st.session_state.detect = False
                 st.rerun()
 
-        # Show detection status
-        status_text = "🟢 **Detection Running**" if st.session_state.detect else "🔴 Detection Stopped"
-        st.markdown(f"**Status:** {status_text}")
+        status = "🟢 Running" if st.session_state.detect else "🔴 Stopped"
+        st.info(f"**Detection Status:** {status}")
 
         st.divider()
 
         st.subheader("📩 Telegram Alerts")
         st.markdown("[Get Chat ID → @userinfobot](https://t.me/userinfobot)")
 
-        chat_id_input = st.text_input("Enter Telegram Chat ID", placeholder="1234567890")
+        chat_id_input = st.text_input("Enter Telegram Chat ID", placeholder="123456789")
 
         if st.button("Save Chat ID", type="primary", use_container_width=True):
             if chat_id_input.strip():
                 update_chat_id(user, chat_id_input.strip())
-                st.success("✅ Chat ID saved successfully!")
+                st.success("✅ Chat ID saved!")
                 st.rerun()
             else:
-                st.error("Please enter a valid Chat ID")
+                st.error("Please enter Chat ID")
 
-        # Show connection status
         saved_chat = get_chat_id(user)
         if saved_chat:
             st.success("✅ Telegram Connected")
-            st.caption(f"Chat ID: `{saved_chat[:4]}...{saved_chat[-4:]}`")
         else:
-            st.warning("⚠️ Telegram not connected. Alerts will not be sent.")
+            st.warning("⚠️ Telegram not connected")
 
-    st.caption("AI Vision Engine | Real-time Object Detection with YOLOv8 & Telegram Alerts")
+    st.caption("AI Vision Engine | YOLOv8 + Real-time Alerts")
