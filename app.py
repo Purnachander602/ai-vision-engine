@@ -6,7 +6,7 @@ from streamlit_webrtc import webrtc_streamer, VideoProcessorBase
 from auth import add_user, login_user, update_chat_id, get_chat_id
 from detect import detect_objects
 
-# ========================== PAGE CONFIG & STYLING ==========================
+# ========================== CONFIG & STYLING ==========================
 st.set_page_config(
     page_title="AI Vision Engine",
     page_icon="🤖",
@@ -51,7 +51,7 @@ class VideoProcessor(VideoProcessorBase):
         return av.VideoFrame.from_ndarray(img, format="bgr24")
 
 
-# ========================== AUTHENTICATION ==========================
+# ========================== LOGIN / SIGNUP ==========================
 if st.session_state.user is None:
     tab1, tab2 = st.tabs(["🔑 Login", "📝 Sign Up"])
 
@@ -59,11 +59,9 @@ if st.session_state.user is None:
         st.subheader("Login")
         email = st.text_input("Email", key="login_email")
         password = st.text_input("Password", type="password", key="login_password")
-
         if st.button("Login", type="primary", use_container_width=True):
             if email and password:
-                user_data = login_user(email, password)
-                if user_data:
+                if login_user(email, password):
                     st.session_state.user = email
                     st.success("✅ Login successful!")
                     st.rerun()
@@ -73,10 +71,9 @@ if st.session_state.user is None:
                 st.warning("Please enter email and password")
 
     with tab2:
-        st.subheader("Create New Account")
+        st.subheader("Create Account")
         email = st.text_input("Email", key="signup_email")
         password = st.text_input("Password", type="password", key="signup_password")
-
         if st.button("Create Account", type="primary", use_container_width=True):
             if email and password:
                 if add_user(email, password):
@@ -87,9 +84,8 @@ if st.session_state.user is None:
                 st.warning("Please fill all fields")
 
 else:
-    # ========================== MAIN DASHBOARD ==========================
+    # ========================== DASHBOARD ==========================
     user = st.session_state.user
-
     st.success(f"✅ Logged in as **{user}**")
 
     if st.button("Logout"):
@@ -105,23 +101,23 @@ else:
     with col1:
         st.subheader("📹 Live Surveillance Camera")
 
-        st.info("""
-        **📌 Important:**  
-        If you see a **"Select Device"** button, please click it and manually choose your **Laptop Webcam**.
+        st.warning("""
+        **⚠️ Multiple cameras detected**  
+        Please click the **"Select Device"** button and manually choose your **Laptop Webcam**.
+        
+        After selecting once, the stream will start.
         """)
 
-        # Simple & reliable constraints (avoiding "exact" to reduce failures)
-        video_constraints = {
-            "width": {"ideal": 1280},
-            "height": {"ideal": 720},
-            "facingMode": "user"          # Prefer front camera (laptop cam) without forcing exact
-        }
-
+        # Simple & reliable constraints (no "exact" to avoid permission errors)
         ctx = webrtc_streamer(
             key="camera",
             video_processor_factory=VideoProcessor,
             media_stream_constraints={
-                "video": video_constraints,
+                "video": {
+                    "width": {"ideal": 1280},
+                    "height": {"ideal": 720},
+                    "facingMode": "user"          # Prefer front camera (laptop)
+                },
                 "audio": False
             },
             async_processing=True,
@@ -163,7 +159,7 @@ else:
                 st.success("✅ Chat ID saved!")
                 st.rerun()
             else:
-                st.error("Please enter a valid Chat ID")
+                st.error("Please enter Chat ID")
 
         saved_chat = get_chat_id(user)
         if saved_chat:
@@ -171,4 +167,4 @@ else:
         else:
             st.warning("⚠️ Telegram not connected")
 
-    st.caption("AI Vision Engine | YOLOv8 Real-time Detection")
+    st.caption("AI Vision Engine | YOLOv8 + Telegram Alerts")
