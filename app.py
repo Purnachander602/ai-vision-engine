@@ -1,6 +1,8 @@
+```python
 import streamlit as st
+import av
 import cv2
-import time
+from streamlit_webrtc import webrtc_streamer, VideoProcessorBase
 from auth import add_user, login_user, update_chat_id, get_chat_id
 from detect import detect_objects
 
@@ -13,8 +15,25 @@ st.title("AI Vision Engine")
 if "user" not in st.session_state:
     st.session_state["user"] = None
 
-if "camera_running" not in st.session_state:
-    st.session_state["camera_running"] = False
+
+# ---------------- VIDEO PROCESSOR ----------------
+
+class VideoProcessor(VideoProcessorBase):
+
+    def __init__(self):
+        self.chat_id = None
+
+    def recv(self, frame):
+
+        img = frame.to_ndarray(format="bgr24")
+
+        # resize frame for faster processing
+        img = cv2.resize(img, (640, 480))
+
+        # run YOLO detection
+        img = detect_objects(img, self.chat_id)
+
+        return av.VideoFrame.from_ndarray(img, format="bgr24")
 
 
 # ---------------- LOGIN PAGE ----------------
@@ -67,7 +86,6 @@ else:
 
     if st.button("Logout"):
         st.session_state["user"] = None
-        st.session_state["camera_running"] = False
         st.rerun()
 
     st.divider()
@@ -86,52 +104,23 @@ else:
 
     saved_chat = get_chat_id(user)
 
+    # ---------------- DETECTION ----------------
+
     if saved_chat:
 
         st.success("Telegram Connected")
 
-        col1, col2 = st.columns(2)
+        st.subheader("Live Camera Detection")
 
-        with col1:
-            if st.button("Start Detection"):
-                st.session_state["camera_running"] = True
+        ctx = webrtc_streamer(
+            key="ai-vision-camera",
+            video_processor_factory=VideoProcessor,
+            media_stream_constraints={
+                "video": True,
+                "audio": False
+            }
+        )
 
-        with col2:
-            if st.button("Stop Detection"):
-                st.session_state["camera_running"] = False
-
-        frame_window = st.image([])
-
-        # -------- CAMERA SECTION --------
-
-        if st.session_state["camera_running"]:
-
-            cap = cv2.VideoCapture(0)
-
-            # reduce camera resolution (important for speed)
-            cap.set(3, 640)
-            cap.set(4, 480)
-
-            while st.session_state["camera_running"]:
-
-                ret, frame = cap.read()
-
-                if not ret:
-                    st.error("Camera not working")
-                    break
-
-                # resize frame for faster processing
-                frame = cv2.resize(frame, (640, 480))
-
-                # object detection
-                frame = detect_objects(frame, saved_chat)
-
-                # convert color for streamlit
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-                frame_window.image(frame)
-
-                # small delay to reduce lag
-                time.sleep(0.03)
-
-            cap.release()
+        if ctx.video_processor:
+            ctx.video_processor.chat_id = saved_chat
+```
