@@ -1,79 +1,87 @@
 import cv2
 import time
 from ultralytics import YOLO
+from telegram_notify import send_telegram_alert, send_telegram_image
 
-# Load the YOLO model once (outside the function for better performance)
+# Load model once at module level (important for performance)
 model = YOLO("yolov8n.pt")
 
-# Global variables for alert throttling
+# Alert control
 last_alert = 0
-ALERT_INTERVAL = 10  # seconds between alerts
+ALERT_INTERVAL = 10  # seconds
 
-ALERT_OBJECTS = ["person", "knife", "cell phone"]
+# Objects that should trigger alerts
+ALERT_OBJECTS = {"person", "knife", "cell phone"}
 
 
 def detect_objects(frame, chat_id):
     """
-    Detect objects using YOLOv8 and send Telegram alert if dangerous object is detected.
+    Detect objects using YOLOv8 and send Telegram alert if dangerous object is found.
     
     Args:
-        frame: Input image frame from camera (BGR format)
-        chat_id: Telegram chat ID to send alerts
+        frame: numpy array (BGR image)
+        chat_id: Telegram chat ID for alerts
     
     Returns:
-        Annotated frame with bounding boxes (BGR)
+        Annotated frame with bounding boxes
     """
     global last_alert
 
-    if frame is None:
-        return None
+    if frame is None or chat_id is None:
+        return frame
 
-    # Run YOLO inference
-    results = model(frame, conf=0.4, verbose=False)
+    try:
+        # Run YOLO inference
+        results = model(frame, conf=0.4, verbose=False)  # verbose=False to reduce console spam
 
-    detected_alert_object = None
+        # Get the first (and usually only) result
+        result = results[0]
 
-    # Check for alert-worthy objects
-    for result in results:
-        if result.boxes is None or len(result.boxes) == 0:
-            continue
+        detected_alert_object = None
 
-        for box in result.boxes:
-            class_id = int(box.cls[0])
-            label = model.names[class_id]
+        # Check for alert-worthy objects
+        if result.boxes is not None and len(result.boxes) > 0:
+            for box in result.boxes:
+                class_id = int(box.cls)
+                label = model.names[class_id]
 
-            if label in ALERT_OBJECTS:
-                detected_alert_object = label
-                break  # No need to check further boxes
+                if label in ALERT_OBJECTS:
+                    detected_alert_object = label
+                    break
 
+        # Send alert if dangerous object detected and cooldown has passed
         if detected_alert_object:
-            break  # No need to check further results
+            current_time = time.time()
 
-    # Send Telegram alert if needed (with cooldown)
-    if detected_alert_object:
-        current_time = time.time()
-        
-        if current_time - last_alert > ALERT_INTERVAL:
-            try:
-                # Save image for sending
-                image_path = "detected.jpg"
-                cv2.imwrite(image_path, frame)
+            if current_time - last_alert > ALERT_INTERVAL:
+                try:
+                    image_path = "detected.jpg"
+                    
+                    # Save current frame
+                    cv2.imwrite(image_path, frame)
 
-                # Send alerts
-                send_telegram_alert(chat_id, f"🚨 Alert: {detected_alert_object.upper()} detected!")
-                send_telegram_image(chat_id, image_path)
+                    # Send alerts
+                    send_telegram_alert(
+                        chat_id, 
+                        f"🚨 Alert: **{detected_alert_object.capitalize()}** detected!"
+                    )
+                    
+                    send_telegram_image(
+                        chat_id, 
+                        image_path, 
+                        caption=f"🚨 {detected_alert_object.capitalize()} detected at {time.strftime('%H:%M:%S')}"
+                    )
 
-                last_alert = current_time
-                print(f"Alert sent: {detected_alert_object}")  # For debugging
+                    last_alert = current_time
 
-            except Exception as e:
-                print(f"Failed to send Telegram alert: {e}")
+                except Exception as e:
+                    print(f"Telegram alert failed: {e}")
 
-    # Return the annotated frame (with all detections drawn)
-    return results[0].plot()
+        # Return annotated frame (with bounding boxes and labels)
+        return result.plot()
 
-
-# Optional: Function to reset alert timer (useful on restart)
-def reset_alert_timer():
-    global last_alert
-    last_alert = 0
+    except Exception as e:
+        print(f"Detection error: {e}")
+        # Return original frame if detection fails
+        return frame
+    
