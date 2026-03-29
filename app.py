@@ -21,7 +21,6 @@ st.session_state["detect"] = False
 
 class VideoProcessor(VideoProcessorBase):
 
-```
 def __init__(self):
     self.chat_id = None
     self.frame_count = 0
@@ -43,13 +42,13 @@ def recv(self, frame):
         print("Detection error:", e)
 
     return av.VideoFrame.from_ndarray(img, format="bgr24")
-```
+
 
 # ---------------- LOGIN PAGE ----------------
 
 if st.session_state["user"] is None:
 
-```
+
 login_tab, signup_tab = st.tabs(["Login", "Signup"])
 
 with login_tab:
@@ -82,13 +81,13 @@ with signup_tab:
             st.success("Account created. Please login.")
         else:
             st.error("User already exists")
-```
+
 
 # ---------------- DASHBOARD ----------------
 
 else:
 
-```
+
 user = st.session_state["user"]
 
 st.success(f"Logged in as {user}")
