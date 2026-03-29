@@ -3,7 +3,7 @@ import cv2
 import av
 from streamlit_webrtc import webrtc_streamer, VideoProcessorBase
 
-# Import your custom modules (make sure these files exist)
+# Import your custom modules
 from auth import add_user, login_user, update_chat_id, get_chat_id
 from detect import detect_objects
 
@@ -13,10 +13,10 @@ st.title("AI Vision Engine")
 
 # ---------------- SESSION STATE ----------------
 if "user" not in st.session_state:
-    st.session_state["user"] = None
+    st.session_state.user = None
 
 if "detect" not in st.session_state:
-    st.session_state["detect"] = False
+    st.session_state.detect = False
 
 
 # ---------------- VIDEO PROCESSOR ----------------
@@ -29,33 +29,34 @@ class VideoProcessor(VideoProcessorBase):
         img = frame.to_ndarray(format="bgr24")
 
         try:
+            # Resize for faster processing
             img = cv2.resize(img, (640, 480))
 
             # Run detection every 5 frames to reduce lag
             self.frame_count += 1
 
-            if st.session_state["detect"] and self.frame_count % 5 == 0:
-                if self.chat_id:
+            if st.session_state.detect and self.frame_count % 5 == 0:
+                if self.chat_id:  # Only detect if chat_id is available
                     img = detect_objects(img, self.chat_id)
 
         except Exception as e:
-            print("Detection error:", e)
+            print(f"Detection error: {e}")
 
         return av.VideoFrame.from_ndarray(img, format="bgr24")
 
 
-# ---------------- LOGIN / SIGNUP ----------------
-if st.session_state["user"] is None:
+# ---------------- LOGIN / SIGNUP PAGE ----------------
+if st.session_state.user is None:
     login_tab, signup_tab = st.tabs(["Login", "Signup"])
 
     with login_tab:
         email = st.text_input("Email", key="login_email")
-        password = st.text_input("Password", type="password", key="login_pass")
+        password = st.text_input("Password", type="password", key="login_password")
 
         if st.button("Login"):
             user = login_user(email, password)
             if user:
-                st.session_state["user"] = email
+                st.session_state.user = email
                 st.success("Login successful!")
                 st.rerun()
             else:
@@ -72,14 +73,15 @@ if st.session_state["user"] is None:
             else:
                 st.error("User already exists")
 
+
 # ---------------- DASHBOARD (After Login) ----------------
 else:
-    user = st.session_state["user"]
+    user = st.session_state.user
 
     st.success(f"Logged in as: **{user}**")
 
     if st.button("Logout"):
-        st.session_state["user"] = None
+        st.session_state.user = None
         st.rerun()
 
     st.divider()
@@ -100,49 +102,47 @@ else:
 
     saved_chat = get_chat_id(user)
 
-    # ---------------- CAMERA + DETECTION ----------------
+    # ---------------- LIVE CAMERA + DETECTION ----------------
     if saved_chat:
         st.success("✅ Telegram Connected")
 
-        st.subheader("Live Camera Feed")
+        st.subheader("Live Camera")
 
         col1, col2 = st.columns(2)
 
         with col1:
             if st.button("▶️ Start Detection"):
-                st.session_state["detect"] = True
+                st.session_state.detect = True
                 st.rerun()
 
         with col2:
             if st.button("⏹️ Stop Detection"):
-                st.session_state["detect"] = False
+                st.session_state.detect = False
                 st.rerun()
 
         # WebRTC Streamer
-ctx = webrtc_streamer(
-    key="ai-vision-camera",
-    video_processor_factory=VideoProcessor,
+        ctx = webrtc_streamer(
+            key="ai-camera",
+            video_processor_factory=VideoProcessor,
+            media_stream_constraints={
+                "video": {
+                    "facingMode": "user",
+                    "width": 640,
+                    "height": 480
+                },
+                "audio": False
+            },
+            video_html_attrs={
+                "autoPlay": True,
+                "controls": False,
+                "muted": True
+            },
+            async_processing=True
+        )
 
-    media_stream_constraints={
-        "video": {
-            "facingMode": "user",
-            "width": 640,
-            "height": 480
-        },
-        "audio": False
-    },
-
-    video_html_attrs={
-        "autoPlay": True,
-        "controls": False,
-        "muted": True
-    },
-
-    async_processing=True
-)
-
-        # Pass chat_id to the processor
-if ctx.video_processor:
+        # Pass chat_id to the video processor
+        if ctx.video_processor:
             ctx.video_processor.chat_id = saved_chat
-else:
+
+    else:
         st.warning("⚠️ Please connect your Telegram Chat ID to enable object detection alerts.")
