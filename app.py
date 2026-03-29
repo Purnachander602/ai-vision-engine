@@ -142,7 +142,7 @@ ctx = webrtc_streamer(
 )
 
         # Pass chat_id to the processor
-        if ctx.video_processor:
+if ctx.video_processor:
             ctx.video_processor.chat_id = saved_chat
 
     else:
