@@ -122,4 +122,3 @@ else:
 
         if ctx.video_processor:
             ctx.video_processor.chat_id = saved_chat
-```
