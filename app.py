@@ -1,5 +1,4 @@
 import streamlit as st
-import av
 import cv2
 from streamlit_webrtc import webrtc_streamer, VideoProcessorBase
 from auth import add_user, login_user, update_chat_id, get_chat_id
