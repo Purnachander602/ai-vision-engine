@@ -1,6 +1,6 @@
 streamlit
 streamlit-webrtc
-opencv-python-headless
+opencv-python-headless==4.9.0.80
 ultralytics
 pymongo
 python-dotenv
@@ -8,3 +8,4 @@ requests
 bcrypt
 numpy
 pillow
+av
