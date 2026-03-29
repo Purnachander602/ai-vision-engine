@@ -1,94 +1,153 @@
-import time
-import cv2
 import streamlit as st
-from ultralytics import YOLO
-from telegram_notify import send_telegram_alert, send_telegram_image
+import cv2
+import av
+from streamlit_webrtc import webrtc_streamer, VideoProcessorBase
+from auth import add_user, login_user, update_chat_id, get_chat_id
+from detect import detect_objects
+
+st.set_page_config(page_title="AI Vision Engine", layout="centered")
+
+st.title("AI Vision Engine")
+
+# ---------------- SESSION STATE ----------------
+
+if "user" not in st.session_state:
+st.session_state["user"] = None
+
+if "detect" not in st.session_state:
+st.session_state["detect"] = False
+
+# ---------------- VIDEO PROCESSOR ----------------
+
+class VideoProcessor(VideoProcessorBase):
 
 
-# ---------------- LOAD MODEL ----------------
+def __init__(self):
+    self.chat_id = None
+    self.frame_count = 0
 
-@st.cache_resource
-def load_model():
-    # lightweight model for faster detection
-    return YOLO("yolov8n.pt")
-    model = load_model()
+def recv(self, frame):
 
-
-# ---------------- GLOBAL TIMERS ----------------
-
-last_alert_time = 0
-last_detection_time = 0
-
-ALERT_INTERVAL = 10
-DETECTION_INTERVAL = 0.5
-
-
-# ---------------- DETECTION FUNCTION ----------------
-
-def detect_objects(frame, chat_id=None):
-
-    global last_alert_time
-    global last_detection_time
-
-    current_time = time.time()
-
-    frame = cv2.resize(frame, (640, 480))
-
-    # skip detection if too frequent
-    if current_time - last_detection_time < DETECTION_INTERVAL:
-        return frame
-
-    last_detection_time = current_time
-
-    # run YOLO detection
-    results = model(frame, conf=0.4)
-
-    detected_label = None
-
-    alert_objects = ["person", "knife", "cell phone"]
-
-    for r in results:
-
-        if r.boxes is None:
-            continue
-
-        names = r.names
-
-        for box in r.boxes:
-
-            cls_id = int(box.cls[0])
-            label = names[cls_id]
-
-            if label in alert_objects:
-                detected_label = label
-                break
-
-        if detected_label:
-            break
-
-
-    # ---------------- TELEGRAM ALERT ----------------
-
-    if detected_label and (current_time - last_alert_time > ALERT_INTERVAL):
-
-        image_path = "detected.jpg"
-        cv2.imwrite(image_path, frame)
-
-        if chat_id:
-            send_telegram_alert(chat_id, f"🚨 {detected_label} detected")
-            send_telegram_image(chat_id, image_path)
-
-        last_alert_time = current_time
-
-
-    # ---------------- DRAW BOUNDING BOX ----------------
-
-    annotated_frame = frame
+    img = frame.to_ndarray(format="bgr24")
 
     try:
-        if results and len(results) > 0:
-            annotated_frame = results[0].plot()
-    except Exception as e:
-        print("Annotation error:", e)
+        img = cv2.resize(img, (640, 480))
 
-    return annotated_frame
+        # reduce lag → run detection every 5 frames
+        self.frame_count += 1
+
+        if st.session_state["detect"] and self.frame_count % 5 == 0:
+            img = detect_objects(img, self.chat_id)
+
+    except Exception as e:
+        print("Detection error:", e)
+
+    return av.VideoFrame.from_ndarray(img, format="bgr24")
+
+
+# ---------------- LOGIN PAGE ----------------
+
+if st.session_state["user"] is None:
+
+
+login_tab, signup_tab = st.tabs(["Login", "Signup"])
+
+with login_tab:
+
+    email = st.text_input("Email")
+    password = st.text_input("Password", type="password")
+
+    if st.button("Login"):
+
+        user = login_user(email, password)
+
+        if user:
+            st.session_state["user"] = email
+            st.success("Login successful")
+            st.rerun()
+
+        else:
+            st.error("Invalid email or password")
+
+with signup_tab:
+
+    new_email = st.text_input("Email", key="signup_email")
+    new_pass = st.text_input("Password", type="password", key="signup_pass")
+
+    if st.button("Create Account"):
+
+        created = add_user(new_email, new_pass)
+
+        if created:
+            st.success("Account created. Please login.")
+        else:
+            st.error("User already exists")
+
+
+# ---------------- DASHBOARD ----------------
+
+else:
+
+
+user = st.session_state["user"]
+
+st.success(f"Logged in as {user}")
+
+if st.button("Logout"):
+    st.session_state["user"] = None
+    st.rerun()
+
+st.divider()
+
+# ---------------- TELEGRAM ----------------
+
+st.subheader("Connect Telegram Notifications")
+
+st.markdown("Get your chat id here → https://t.me/userinfobot")
+
+chat_id = st.text_input("Enter Telegram Chat ID")
+
+if st.button("Save Chat ID"):
+    update_chat_id(user, chat_id)
+    st.success("Chat ID saved")
+
+saved_chat = get_chat_id(user)
+
+# ---------------- CAMERA + DETECTION ----------------
+
+if saved_chat:
+
+    st.success("Telegram Connected")
+
+    st.subheader("Live Camera")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button("Start Detection"):
+            st.session_state["detect"] = True
+
+    with col2:
+        if st.button("Stop Detection"):
+            st.session_state["detect"] = False
+
+    ctx = webrtc_streamer(
+        key="ai-vision-camera",
+        video_processor_factory=VideoProcessor,
+        media_stream_constraints={
+            "video": {
+                "facingMode": "user",
+                "width": 640,
+                "height": 480
+            },
+            "audio": False
+        },
+        async_processing=True
+    )
+
+    if ctx.video_processor:
+        ctx.video_processor.chat_id = saved_chat
+
+else:
+    st.warning("Please connect Telegram Chat ID to enable alerts.")
+
