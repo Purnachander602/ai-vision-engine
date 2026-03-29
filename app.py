@@ -44,9 +44,7 @@ class VideoProcessor(VideoProcessorBase):
 # ---------------- LOGIN PAGE ----------------
 
 if st.session_state["user"] is None:
-
-
-login_tab, signup_tab = st.tabs(["Login", "Signup"])
+    login_tab, signup_tab = st.tabs(["Login", "Signup"])
 
 with login_tab:
 
