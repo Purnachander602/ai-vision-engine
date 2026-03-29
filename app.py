@@ -81,8 +81,6 @@ with signup_tab:
 # ---------------- DASHBOARD ----------------
 
 else:
-
-
 user = st.session_state["user"]
 
 st.success(f"Logged in as {user}")
