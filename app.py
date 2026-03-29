@@ -20,8 +20,7 @@ if "detect" not in st.session_state:
 # ---------------- VIDEO PROCESSOR ----------------
 
 class VideoProcessor(VideoProcessorBase):
-
-def __init__(self):
+    def __init__(self):
     self.chat_id = None
     self.frame_count = 0
 
