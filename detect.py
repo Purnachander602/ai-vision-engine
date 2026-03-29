@@ -86,4 +86,3 @@ def detect_objects(frame, chat_id=None):
     annotated_frame = results[0].plot()
 
     return annotated_frame
-```
