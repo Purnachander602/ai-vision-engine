@@ -6,20 +6,24 @@ from streamlit_webrtc import webrtc_streamer, VideoProcessorBase
 from auth import add_user, login_user, update_chat_id, get_chat_id
 from detect import detect_objects
 
-# ========================== PAGE CONFIG ==========================
+# ========================== PAGE CONFIG & STYLING ==========================
 st.set_page_config(
     page_title="AI Vision Engine",
     page_icon="🤖",
     layout="wide"
 )
 
-# ========================== CUSTOM CSS ==========================
 st.markdown("""
 <style>
     .stApp { background-color: #0f172a; color: white; }
     h1 { text-align: center; color: #60a5fa; }
-    video { width: 100% !important; border-radius: 12px; border: 2px solid #334155; }
+    video { 
+        width: 100% !important; 
+        border-radius: 12px; 
+        border: 2px solid #334155; 
+    }
     .stButton>button { width: 100%; }
+    .success { color: #4ade80; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -81,9 +85,9 @@ if st.session_state.user is None:
         if st.button("Create Account", type="primary", use_container_width=True):
             if email and password:
                 if add_user(email, password):
-                    st.success("✅ Account created! Please login.")
+                    st.success("✅ Account created successfully! Please login.")
                 else:
-                    st.error("❌ User already exists")
+                    st.error("❌ User with this email already exists")
             else:
                 st.warning("Please fill all fields")
 
@@ -106,26 +110,37 @@ else:
     with col1:
         st.subheader("📹 Live Surveillance Camera")
 
-        # Camera preference option
-        camera_preference = st.radio(
-            "Camera Source",
-            options=["Laptop Webcam (Recommended)", "Any Camera"],
+        # Camera selection preference
+        camera_mode = st.radio(
+            "Camera Preference",
+            options=[
+                "Built-in Laptop Webcam (Recommended)",
+                "Any Available Camera"
+            ],
             horizontal=True,
-            label_visibility="collapsed"
+            key="camera_preference"
         )
 
-        # Set facingMode based on preference
-        facing_mode = {"exact": "user"} if camera_preference == "Laptop Webcam (Recommended)" else "user"
+        # Strong constraints to prefer laptop webcam
+        if camera_mode == "Built-in Laptop Webcam (Recommended)":
+            video_constraints = {
+                "width": {"ideal": 1280, "min": 640},
+                "height": {"ideal": 720, "min": 480},
+                "facingMode": {"exact": "user"},   # This is the strongest preference
+                "frameRate": {"ideal": 30, "min": 15}
+            }
+        else:
+            video_constraints = {
+                "width": {"ideal": 1280},
+                "height": {"ideal": 720},
+                "facingMode": "user"
+            }
 
         ctx = webrtc_streamer(
             key="camera",
             video_processor_factory=VideoProcessor,
             media_stream_constraints={
-                "video": {
-                    "width": {"ideal": 1280},
-                    "height": {"ideal": 720},
-                    "facingMode": facing_mode
-                },
+                "video": video_constraints,
                 "audio": False
             },
             async_processing=True,
@@ -134,6 +149,7 @@ else:
             }
         )
 
+        # Pass chat_id to the processor
         if ctx.video_processor:
             ctx.video_processor.chat_id = get_chat_id(user)
 
@@ -151,28 +167,35 @@ else:
                 st.session_state.detect = False
                 st.rerun()
 
+        # Detection Status
         status = "🟢 Running" if st.session_state.detect else "🔴 Stopped"
         st.info(f"**Detection Status:** {status}")
 
         st.divider()
 
         st.subheader("📩 Telegram Alerts")
-        st.markdown("[Get Chat ID → @userinfobot](https://t.me/userinfobot)")
+        st.markdown("[Get your Chat ID → @userinfobot](https://t.me/userinfobot)")
 
-        chat_id_input = st.text_input("Enter Telegram Chat ID", placeholder="123456789")
+        chat_id_input = st.text_input(
+            "Enter Telegram Chat ID", 
+            placeholder="123456789",
+            key="chat_id_input"
+        )
 
         if st.button("Save Chat ID", type="primary", use_container_width=True):
-            if chat_id_input.strip():
+            if chat_id_input and chat_id_input.strip():
                 update_chat_id(user, chat_id_input.strip())
-                st.success("✅ Chat ID saved!")
+                st.success("✅ Chat ID saved successfully!")
                 st.rerun()
             else:
-                st.error("Please enter Chat ID")
+                st.error("Please enter a valid Chat ID")
 
+        # Show Telegram status
         saved_chat = get_chat_id(user)
         if saved_chat:
             st.success("✅ Telegram Connected")
+            st.caption(f"Connected to: `{saved_chat[:4]}...{saved_chat[-4:]}`")
         else:
-            st.warning("⚠️ Telegram not connected")
+            st.warning("⚠️ Telegram not connected - Alerts disabled")
 
-    st.caption("AI Vision Engine | YOLOv8 + Real-time Alerts")
+    st.caption("AI Vision Engine | Real-time YOLOv8 Object Detection with Telegram Alerts")
