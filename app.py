@@ -21,12 +21,10 @@ if "detect" not in st.session_state:
 
 class VideoProcessor(VideoProcessorBase):
     def __init__(self):
-    self.chat_id = None
-    self.frame_count = 0
-
-def recv(self, frame):
-
-    img = frame.to_ndarray(format="bgr24")
+        self.chat_id = None
+        self.frame_count = 0
+        def recv(self, frame):
+            img = frame.to_ndarray(format="bgr24")
 
     try:
         img = cv2.resize(img, (640, 480))
