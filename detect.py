@@ -1,12 +1,19 @@
-from ultralytics import YOLO
-from telegram_notify import send_telegram_alert, send_telegram_image
 import time
 import cv2
+import streamlit as st
+from ultralytics import YOLO
+from telegram_notify import send_telegram_alert, send_telegram_image
+
 
 # ---------------- LOAD MODEL ----------------
 
-# lightweight model for faster detection
-model = YOLO("yolov8n.pt")
+@st.cache_resource
+def load_model():
+    # lightweight model for faster detection
+    return YOLO("yolov8n.pt")
+
+model = load_model()
+
 
 # ---------------- GLOBAL TIMERS ----------------
 
@@ -62,6 +69,7 @@ def detect_objects(frame, chat_id=None):
         if detected_label:
             break
 
+
     # ---------------- TELEGRAM ALERT ----------------
 
     if detected_label:
@@ -82,7 +90,12 @@ def detect_objects(frame, chat_id=None):
 
             last_alert_time = current_time
 
-    # draw bounding boxes
-    annotated_frame = results[0].plot()
+
+    # ---------------- DRAW BOUNDING BOX ----------------
+
+    try:
+        annotated_frame = results[0].plot()
+    except:
+        annotated_frame = frame
 
     return annotated_frame
